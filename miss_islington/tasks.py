@@ -1,25 +1,37 @@
-import celery
 import asyncio
 import os
 import subprocess
+
 import aiohttp
-from gidgethub import aiohttp as gh_aiohttp
-
 import cachetools
-
-from celery import bootsteps
-
+import celery
 from cherry_picker import cherry_picker
+from celery import bootsteps
+from gidgethub import aiohttp as gh_aiohttp
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
 
 from . import util
+
 
 app = celery.Celery("backport_cpython")
 
 app.conf.update(
-    BROKER_URL=os.environ["REDIS_URL"], CELERY_RESULT_BACKEND=os.environ["REDIS_URL"]
+    broker_url=os.environ["HEROKU_REDIS_MAROON_URL"],
+    result_backend=os.environ["HEROKU_REDIS_MAROON_URL"],
 )
 
 cache = cachetools.LRUCache(maxsize=500)
+sentry_sdk.init(os.environ.get("SENTRY_DSN"), integrations=[CeleryIntegration()])
+
+
+CHERRY_PICKER_CONFIG = {
+    "team": "python",
+    "repo": "cpython",
+    "check_sha": "7f777ed95a19224294949e1b4ce56bbffcb1fe9f",
+    "fix_commit_msg": True,
+    "default_branch": "main",
+}
 
 
 @app.task()
@@ -88,7 +100,11 @@ async def backport_task_asyncio(
                 )
                 await util.assign_pr_to_core_dev(gh, issue_number, merged_by)
         cp = cherry_picker.CherryPicker(
-            "origin", commit_hash, [branch], prefix_commit=False
+            "origin",
+            commit_hash,
+            [branch],
+            config=CHERRY_PICKER_CONFIG,
+            prefix_commit=False,
         )
         try:
             cp.backport()
