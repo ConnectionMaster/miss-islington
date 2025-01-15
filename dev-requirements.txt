@@ -1,7 +1,6 @@
 -r requirements.txt
 coverage
-pytest==6.2.3
-pytest-asyncio==0.14.0
-pytest-aiohttp==0.3.0
-pytest-cov==2.11.1
-codecov==2.1.11
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-aiohttp==1.0.5
+pytest-cov==6.0.0
