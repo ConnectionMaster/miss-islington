@@ -1,36 +1,49 @@
 name: Tests
 
-on:
-  pull_request:
-  push:
-    branches: main
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_COLOR: 1
 
 jobs:
   test:
-    name: test w/ Python ${{ matrix.python-version }}
-
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.7"]
+        # remember to update the envlist in tox.ini too
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v1
+      - uses: actions/checkout@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - uses: actions/setup-python@v2
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python3 -m pip install -U -r dev-requirements.txt
-      - run: python3 -m coverage run --branch -m pytest tests/
-      - uses: codecov/codecov-action@v1
+          allow-prereleases: true
+
+      - name: Install uv
+        uses: hynek/setup-cached-uv@v2
+        with:
+          cache-dependency-path: |
+            requirements.txt
+            dev-requirements.txt
+
+      - name: Tox tests
+        run: |
+          uvx --with tox-uv tox -e py
+
+      - uses: codecov/codecov-action@v5
         if: always()
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-
+          files: ./coverage.xml
+          flags: Python_${{ matrix.python-version }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_ORG_TOKEN }}

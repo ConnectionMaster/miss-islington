@@ -3,10 +3,11 @@ from unittest import mock
 
 from gidgethub import sansio
 
+import pytest
 import redis
 import kombu
 
-os.environ["REDIS_URL"] = "someurl"
+os.environ["HEROKU_REDIS_MAROON_URL"] = "someurl"
 
 from miss_islington import backport_pr
 
@@ -57,7 +58,8 @@ async def test_labeled_on_merged_pr_no_backport_label():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues{/number}"
         },
-        "label": {"name": "CLA signed"},
+        "label": {"name": "skip news"},
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -80,6 +82,7 @@ async def test_merged_pr_no_backport_label():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -88,7 +91,7 @@ async def test_merged_pr_no_backport_label():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"}
+            {"name": "skip news"}
         ],
     }
 
@@ -98,7 +101,8 @@ async def test_merged_pr_no_backport_label():
     assert not hasattr(gh, "post_url")
 
 
-async def test_merged_pr_with_backport_label():
+@pytest.mark.parametrize("branch", ["3.10", "3.11", "4.0", "3.7"])
+async def test_merged_pr_with_backport_label(branch):
     data = {
         "action": "closed",
         "pull_request": {
@@ -111,6 +115,7 @@ async def test_merged_pr_with_backport_label():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -119,15 +124,16 @@ async def test_merged_pr_with_backport_label():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"},
-            {"name": "needs backport to 3.7"},
+            {"name": f"needs backport to {branch}"},
         ],
     }
 
     gh = FakeGH(getitem=getitem)
     with mock.patch("miss_islington.tasks.backport_task.delay"):
         await backport_pr.router.dispatch(event, gh)
-        assert "I'm working now to backport this PR to: 3.7" in gh.post_data["body"]
+        assert (
+            f"I'm working now to backport this PR to: {branch}" in gh.post_data["body"]
+        )
         assert gh.post_url == "/repos/python/cpython/issues/1/comments"
 
 
@@ -144,6 +150,7 @@ async def test_merged_pr_with_backport_label_thank_pr_author():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -152,7 +159,6 @@ async def test_merged_pr_with_backport_label_thank_pr_author():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"},
             {"name": "needs backport to 3.7"},
         ],
     }
@@ -178,6 +184,7 @@ async def test_easter_egg():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -186,7 +193,6 @@ async def test_easter_egg():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"},
             {"name": "needs backport to 3.7"},
         ],
     }
@@ -224,6 +230,7 @@ async def test_backport_pr_redis_connection_error():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -232,7 +239,6 @@ async def test_backport_pr_redis_connection_error():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"},
             {"name": "needs backport to 3.7"},
         ],
     }
@@ -257,6 +263,7 @@ async def test_backport_pr_kombu_operational_error():
         "repository": {
             "issues_url": "https://api.github.com/repos/python/cpython/issues/1"
         },
+        "installation": {"id": "123"}
     }
     event = sansio.Event(data, event="pull_request", delivery_id="1")
 
@@ -265,7 +272,6 @@ async def test_backport_pr_kombu_operational_error():
             "labels_url": "https://api.github.com/repos/python/cpython/issues/1/labels{/name}"
         },
         "https://api.github.com/repos/python/cpython/issues/1/labels": [
-            {"name": "CLA signed"},
             {"name": "needs backport to 3.7"},
         ],
     }
